@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 interface Player {
   user_id: string;
   is_host: boolean;
-  profile?: {
+  profiles?: {
     username: string | null;
   };
 }
@@ -95,7 +95,7 @@ const WaitingRoom = () => {
         .select(`
           user_id,
           is_host,
-          profile:profiles!battle_players_user_id_fkey (
+          profiles (
             username
           )
         `)
@@ -211,7 +211,7 @@ const WaitingRoom = () => {
                 <span>
                   {player.user_id === user?.id
                     ? 'You'
-                    : player.profile?.username || 'Anonymous'}
+                    : player.profiles?.username || 'Anonymous'}
                 </span>
               </div>
             </div>
