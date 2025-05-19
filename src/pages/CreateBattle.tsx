@@ -29,7 +29,7 @@ const CreateBattle = () => {
     try {
       const code = generateRoomCode();
       
-      // Use a single query to create both the battle and the player
+      // Use the stored procedure to create battle and add host
       const { data: battle, error: battleError } = await supabase
         .rpc('create_battle_with_host', {
           p_code: code,
