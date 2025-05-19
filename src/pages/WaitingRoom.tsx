@@ -8,13 +8,10 @@ import toast from 'react-hot-toast';
 interface Player {
   user_id: string;
   is_host: boolean;
-  profiles?: {
-    username: string | null;
-  };
+  username?: string;
 }
 
 interface Battle {
-  id: string;
   theme: string;
   category: string;
   max_players: number;
@@ -43,45 +40,40 @@ const WaitingRoom = () => {
           .eq('code', roomId)
           .limit(1);
 
-        if (battleError) {
-          console.error('Error fetching battle:', battleError);
-          throw new Error('Failed to load battle details');
-        }
-
-        if (!battles?.length) {
-          throw new Error('Battle not found');
+        if (battleError || !battles?.length) {
+          toast.error('Battle not found');
+          navigate('/');
+          return;
         }
 
         setBattle(battles[0]);
 
-        // Initial player fetch
-        await fetchPlayers(battles[0].id);
-
         // Subscribe to player changes
         const playersSubscription = supabase
-          .channel(`battle_${battles[0].id}`)
-          .on('postgres_changes', {
-            event: '*',
-            schema: 'public',
-            table: 'battle_players',
-            filter: `battle_id=eq.${battles[0].id}`
-          }, () => {
+          .from('battle_players')
+          .select(`
+            user_id,
+            is_host,
+            profiles (
+              username
+            )
+          `)
+          .eq('battle_id', battles[0].id)
+          .on('*', (payload) => {
             fetchPlayers(battles[0].id);
           })
           .subscribe();
 
+        // Initial player fetch
+        await fetchPlayers(battles[0].id);
         setLoading(false);
 
         return () => {
           supabase.removeChannel(playersSubscription);
         };
       } catch (error) {
-        console.error('Error in fetchBattleAndPlayers:', error);
-        if (error instanceof Error) {
-          toast.error(error.message);
-        } else {
-          toast.error('Failed to load battle');
-        }
+        console.error('Error fetching battle:', error);
+        toast.error('Failed to load battle');
         navigate('/');
       }
     };
@@ -90,30 +82,23 @@ const WaitingRoom = () => {
   }, [roomId, navigate]);
 
   const fetchPlayers = async (battleId: string) => {
-    try {
-      const { data: players, error: playersError } = await supabase
-        .from('battle_players')
-        .select(`
-          user_id,
-          is_host,
-          profiles (
-            username
-          )
-        `)
-        .eq('battle_id', battleId);
+    const { data: players, error: playersError } = await supabase
+      .from('battle_players')
+      .select(`
+        user_id,
+        is_host,
+        profiles (
+          username
+        )
+      `)
+      .eq('battle_id', battleId);
 
-      if (playersError) {
-        console.error('Error fetching players:', playersError);
-        throw new Error('Failed to load players');
-      }
-
-      setPlayers(players || []);
-    } catch (error) {
-      console.error('Error in fetchPlayers:', error);
-      if (error instanceof Error) {
-        toast.error(error.message);
-      }
+    if (playersError) {
+      console.error('Error fetching players:', playersError);
+      return;
     }
+
+    setPlayers(players || []);
   };
 
   const handleStartBattle = async () => {
@@ -126,19 +111,11 @@ const WaitingRoom = () => {
         .eq('id', battle.id)
         .eq('host_id', user?.id);
 
-      if (error) {
-        console.error('Error starting battle:', error);
-        throw new Error('Failed to start battle');
-      }
-
+      if (error) throw error;
+      // Navigate to game page (to be implemented)
       toast.success('Battle started!');
     } catch (error) {
-      console.error('Error in handleStartBattle:', error);
-      if (error instanceof Error) {
-        toast.error(error.message);
-      } else {
-        toast.error('Failed to start battle');
-      }
+      toast.error('Failed to start battle');
     }
   };
 
@@ -151,8 +128,7 @@ const WaitingRoom = () => {
       toast.success('Room code copied!');
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error('Failed to copy code:', error);
-      toast.error('Failed to copy room code');
+      toast.error('Failed to copy code');
     }
   };
 
@@ -180,17 +156,17 @@ const WaitingRoom = () => {
 
       <div className="text-center mb-8">
         <h2 className="text-xl font-medium mb-3">Room Code</h2>
-        <div className="relative inline-block">
+        <div className="relative inline-flex items-center">
           <div className="bg-gradient-to-r from-red-500/10 to-purple-500/10 backdrop-blur-sm px-8 py-4 rounded-lg font-mono text-2xl tracking-wider border border-gray-800">
             {roomId}
-            <button
-              onClick={handleCopyCode}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white transition-colors"
-              title="Copy room code"
-            >
-              {copied ? <Check size={20} /> : <Copy size={20} />}
-            </button>
           </div>
+          <button
+            onClick={handleCopyCode}
+            className="absolute right-3 p-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-white/10"
+            title="Copy room code"
+          >
+            {copied ? <Check size={20} className="text-green-500" /> : <Copy size={20} />}
+          </button>
         </div>
       </div>
 
@@ -235,7 +211,7 @@ const WaitingRoom = () => {
                 <span>
                   {player.user_id === user?.id
                     ? 'You'
-                    : player.profiles?.username || 'Anonymous'}
+                    : player.username || 'Anonymous'}
                 </span>
               </div>
             </div>
