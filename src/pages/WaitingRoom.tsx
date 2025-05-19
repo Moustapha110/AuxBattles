@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Users, Crown, ChevronLeft, Music, Disc } from 'lucide-react';
+import { Users, Crown, ChevronLeft, Music, Disc, Copy, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import toast from 'react-hot-toast';
@@ -29,6 +29,7 @@ const WaitingRoom = () => {
   const [battle, setBattle] = useState<Battle | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!roomId) return;
@@ -141,6 +142,20 @@ const WaitingRoom = () => {
     }
   };
 
+  const handleCopyCode = async () => {
+    if (!roomId) return;
+    
+    try {
+      await navigator.clipboard.writeText(roomId);
+      setCopied(true);
+      toast.success('Room code copied!');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy code:', error);
+      toast.error('Failed to copy room code');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -165,8 +180,17 @@ const WaitingRoom = () => {
 
       <div className="text-center mb-8">
         <h2 className="text-xl font-medium mb-3">Room Code</h2>
-        <div className="bg-gradient-to-r from-red-500/10 to-purple-500/10 backdrop-blur-sm inline-block px-8 py-4 rounded-lg font-mono text-2xl tracking-wider border border-gray-800">
-          {roomId}
+        <div className="relative inline-block">
+          <div className="bg-gradient-to-r from-red-500/10 to-purple-500/10 backdrop-blur-sm px-8 py-4 rounded-lg font-mono text-2xl tracking-wider border border-gray-800">
+            {roomId}
+            <button
+              onClick={handleCopyCode}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-white transition-colors"
+              title="Copy room code"
+            >
+              {copied ? <Check size={20} /> : <Copy size={20} />}
+            </button>
+          </div>
         </div>
       </div>
 
