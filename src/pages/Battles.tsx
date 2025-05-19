@@ -18,81 +18,85 @@ const Battles = () => {
       return;
     }
 
-    if (joinCode.length !== 7) {
-      toast.error('Room code must be 7 characters');
-      return;
-    }
-
     setIsLoading(true);
     try {
-      // Check if battle exists and is joinable
+      // First try to join a battle
       const { data: battles, error: battleError } = await supabase
         .from('battles')
         .select('id, max_players, status')
         .eq('code', joinCode.toUpperCase())
         .single();
 
-      if (battleError) {
-        if (battleError.code === 'PGRST116') {
-          throw new Error('Battle not found');
+      if (!battleError) {
+        // Battle found, handle battle joining
+        if (battles.status !== 'waiting') {
+          throw new Error('Battle has already started or ended');
         }
-        throw battleError;
-      }
 
-      if (!battles) {
-        throw new Error('Battle not found');
-      }
+        const { count: playerCount } = await supabase
+          .from('battle_players')
+          .select('*', { count: 'exact', head: true })
+          .eq('battle_id', battles.id);
 
-      if (battles.status !== 'waiting') {
-        throw new Error('Battle has already started or ended');
-      }
+        if (typeof playerCount === 'number' && playerCount >= battles.max_players) {
+          throw new Error('Battle is full');
+        }
 
-      // Check if user is already in the battle
-      const { data: existingPlayer } = await supabase
-        .from('battle_players')
-        .select('*')
-        .eq('battle_id', battles.id)
-        .eq('user_id', user?.id)
-        .single();
+        const { error: joinError } = await supabase
+          .from('battle_players')
+          .insert([
+            {
+              battle_id: battles.id,
+              user_id: user?.id,
+              is_host: false,
+            },
+          ]);
 
-      if (existingPlayer) {
-        navigate(`/room/${joinCode}`);
+        if (joinError) throw joinError;
+
+        toast.success('Successfully joined the battle!');
+        navigate(`/room/${joinCode.toUpperCase()}`);
         return;
       }
 
-      // Check if battle is full
-      const { count: playerCount } = await supabase
-        .from('battle_players')
-        .select('*', { count: 'exact', head: true })
-        .eq('battle_id', battles.id);
+      // If no battle found, try to join a session
+      const { data: session, error: sessionError } = await supabase
+        .from('battle_sessions')
+        .select('id, status')
+        .eq('id', joinCode.toUpperCase())
+        .single();
 
-      if (typeof playerCount === 'number' && playerCount >= battles.max_players) {
-        throw new Error('Battle is full');
+      if (sessionError) {
+        if (sessionError.code === 'PGRST116') {
+          throw new Error('Room not found');
+        }
+        throw sessionError;
       }
 
-      // Join the battle
-      const { error: joinError } = await supabase
-        .from('battle_players')
+      if (session.status !== 'waiting') {
+        throw new Error('Session has already started or ended');
+      }
+
+      // Join the session
+      const { error: joinSessionError } = await supabase
+        .from('session_players')
         .insert([
           {
-            battle_id: battles.id,
+            session_id: session.id,
             user_id: user?.id,
-            is_host: false,
           },
         ]);
 
-      if (joinError) {
-        throw joinError;
-      }
+      if (joinSessionError) throw joinSessionError;
 
-      toast.success('Successfully joined the battle!');
+      toast.success('Successfully joined the session!');
       navigate(`/room/${joinCode.toUpperCase()}`);
     } catch (error) {
-      console.error('Error joining battle:', error);
+      console.error('Error joining room:', error);
       if (error instanceof Error) {
         toast.error(error.message);
       } else {
-        toast.error('Failed to join battle');
+        toast.error('Failed to join room');
       }
     } finally {
       setIsLoading(false);
@@ -121,7 +125,7 @@ const Battles = () => {
             <form onSubmit={handleJoinBattle} className="flex bg-black rounded-lg">
               <input
                 type="text"
-                placeholder="Enter 7-digit room code"
+                placeholder="Enter room code"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                 className="flex-1 bg-transparent p-4 outline-none placeholder-gray-500"
@@ -131,7 +135,7 @@ const Battles = () => {
               <button
                 type="submit"
                 className="px-6 py-4 text-white font-semibold rounded-r-lg disabled:opacity-50"
-                disabled={joinCode.length !== 7 || isLoading}
+                disabled={!joinCode.trim() || isLoading}
               >
                 {isLoading ? 'Joining...' : 'Join'}
               </button>
